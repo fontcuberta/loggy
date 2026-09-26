@@ -1,0 +1,319 @@
+signatures:
+  - id: cisco-link-down
+    vendor: cisco
+    mnemonic: LINK-3-UPDOWN
+    message_contains: "to down"
+    criticality_floor: alto
+    title: Interfaz caída
+    explanation: Una interfaz física pasó a estado down. El tráfico de ese enlace se interrumpe hasta que vuelva a subir.
+    probable_cause: Cable, óptica, puerto remoto apagado, error de configuración o un corte aguas arriba.
+    actions:
+      - Identifica la interfaz del mensaje y comprueba su estado en el equipo.
+      - Revisa el extremo remoto, el cableado o la óptica y los eventos del mismo minuto.
+      - Si el corte no estaba previsto, escala a quien opera ese enlace.
+
+  - id: cisco-link-up
+    vendor: cisco
+    mnemonic: LINK-3-UPDOWN
+    message_contains: "to up"
+    criticality_floor: alto
+    title: Interfaz recuperada
+    explanation: La interfaz volvió a estado up. Conviene confirmar que el corte previo fue esperado y que el tráfico se ha restablecido.
+    probable_cause: Recuperación del enlace tras un fallo físico o un apagado administrativo.
+    actions:
+      - Confirma que la interfaz del mensaje es la que debía levantarse.
+      - Revisa si hubo pérdida de tráfico mientras estuvo down.
+      - Si sube y baja en bucle, mira errores físicos, duplex y el equipo vecino.
+
+  - id: cisco-lineproto-down
+    vendor: cisco
+    mnemonic: LINEPROTO-5-UPDOWN
+    message_contains: "to down"
+    criticality_floor: alto
+    title: Protocolo de línea caído
+    explanation: El protocolo de línea de la interfaz cayó. Aunque la capa física siga up, ese segmento no está cursando tráfico de forma útil.
+    probable_cause: Extremo remoto caído, encapsulación incorrecta o keepalive perdido.
+    actions:
+      - Comprueba si la interfaz física también está down en los eventos cercanos.
+      - Revisa keepalives, encapsulación y el estado del vecino.
+      - Si afecta a un enlace de producción, trátalo como incidencia de conectividad.
+
+  - id: cisco-lineproto-up
+    vendor: cisco
+    mnemonic: LINEPROTO-5-UPDOWN
+    message_contains: "to up"
+    criticality_floor: bajo
+    title: Protocolo de línea recuperado
+    explanation: El protocolo de línea volvió a up. Sirve para cerrar la ventana del corte y comprobar que no hay flapping.
+    probable_cause: El extremo remoto o la encapsulación se recuperaron.
+    actions:
+      - Confirma que el tráfico de esa interfaz se ha restablecido.
+      - Si el cambio se repite, revisa errores físicos y estabilidad del vecino.
+
+  - id: cisco-config-change
+    vendor: cisco
+    mnemonic: SYS-5-CONFIG_I
+    criticality_floor: medio
+    title: Cambio de configuración
+    explanation: Alguien aplicó configuración en el equipo. Un cambio no previsto puede explicar cortes que aparezcan justo después.
+    probable_cause: Sesión de administración legítima o un cambio no autorizado.
+    actions:
+      - Lee en el mensaje el usuario y el origen (consola, vty o IP).
+      - Contrasta el cambio con la ventana de mantenimiento.
+      - Si el usuario o la IP no son habituales, revisa las cuentas de administración.
+
+  - id: cisco-login-failed
+    vendor: cisco
+    mnemonic: SEC_LOGIN-4-LOGIN_FAILED
+    criticality_floor: alto
+    title: Inicio de sesión fallido
+    explanation: Un intento de acceso al equipo no se autenticó. Varios seguidos desde la misma IP suelen ser fuerza bruta o una credencial mal puesta.
+    probable_cause: Contraseña incorrecta, cuenta bloqueada o un barrido contra la gestión.
+    actions:
+      - Anota el usuario y la IP de origen que figuran en el mensaje.
+      - Si la IP no es de gestión, limita el acceso administrativo y busca más intentos en la línea de tiempo.
+      - Comprueba que las cuentas locales o el servidor AAA siguen siendo los esperados.
+
+  - id: cisco-memory
+    vendor: cisco
+    mnemonic: SYS-2-MALLOCFAIL
+    criticality_floor: critico
+    title: Sin memoria en el equipo
+    explanation: El sistema no pudo reservar memoria. Puede dejar de enrutar, responder o mantener sesiones.
+    probable_cause: Fuga de memoria, tabla llena o un proceso desbocado.
+    actions:
+      - Revisa memoria libre y procesos del equipo en cuanto sea posible.
+      - Comprueba si el fallo se repite y en qué proceso.
+      - Si la plataforma queda inestable, prepara una ventana de reinicio o actualización siguiendo la recomendación del fabricante.
+
+  - id: cisco-dup-ip
+    vendor: cisco
+    mnemonic: IP-4-DUPADDR
+    criticality_floor: alto
+    title: Dirección IP duplicada
+    explanation: Otra máquina está usando la misma IP. Habrá cortes intermitentes o respuestas ARP incoherentes.
+    probable_cause: Configuración duplicada, un equipo de pruebas o un conflicto DHCP.
+    actions:
+      - Identifica la IP y las MAC que menciona el mensaje.
+      - Localiza el segundo equipo en esa VLAN.
+      - Corrige la dirección o la reserva DHCP.
+
+  - id: cisco-bgp-down
+    vendor: cisco
+    mnemonic: BGP-5-ADJCHANGE
+    message_regex: "(?i)\\b(down|idle)\\b"
+    message_not_regex: "(?i)to up|to established|from down to"
+    criticality_floor: alto
+    title: Vecino BGP caído
+    explanation: Una sesión BGP dejó de estar establecida. Las rutas aprendidas por ese vecino pueden desaparecer.
+    probable_cause: Enlace caído, TTL, prefijo rechazado, reinicio del vecino o un filtro nuevo.
+    actions:
+      - Identifica el vecino y mira si el enlace hacia él también cayó.
+      - Revisa el motivo que acompaña al mensaje (notificación, hold time, interfaz).
+      - Si la sesión no vuelve sola, comprueba reachability y la política de ese peer.
+
+  - id: cisco-ospf-down
+    vendor: cisco
+    mnemonic: OSPF-5-ADJCHG
+    message_regex: "(?i)\\bdown\\b"
+    message_not_regex: "(?i)to full|to up"
+    criticality_floor: alto
+    title: Adyacencia OSPF caída
+    explanation: Un vecino OSPF salió de FULL. La convergencia de ese segmento puede cambiar el camino del tráfico.
+    probable_cause: Interfaz caída, hello perdido, MTU distinta o reinicio del vecino.
+    actions:
+      - Localiza la interfaz y el vecino del mensaje.
+      - Comprueba el estado del enlace y si el vecino vuelve a FULL.
+      - Si se queda abajo, revisa hello, MTU y autenticación OSPF.
+
+  - id: cisco-asa-vpn-disconnect
+    vendor: cisco
+    mnemonic: ASA-4-113019
+    criticality_floor: alto
+    title: Sesión VPN terminada
+    explanation: Una sesión VPN remota se cerró. Si no fue el usuario, puede haber caído el túnel o el cliente.
+    probable_cause: Cierre del cliente, timeout, fallo de autenticación o corte del túnel.
+    actions:
+      - Revisa usuario, IP y duración en el mensaje.
+      - Comprueba si en el mismo minuto hay más desconexiones o un fallo del túnel.
+      - Si afecta a muchos usuarios a la vez, mira el concentrador y la salida a Internet.
+
+  - id: cisco-asa-deny
+    vendor: cisco
+    mnemonic: ASA-4-106023
+    criticality_floor: medio
+    title: Tráfico denegado por política
+    explanation: El firewall bloqueó un paquete por una ACL. Un caso aislado suele ser ruido; muchos desde el mismo origen merecen una mirada.
+    probable_cause: Regla de entrada, un escaneo o una aplicación que apunta a un puerto cerrado.
+    actions:
+      - Identifica origen, destino, puerto y el access-group del mensaje.
+      - Decide si esa política debe seguir denegando ese flujo.
+      - Si el origen es interno y el destino es un servicio legítimo, revisa la regla antes de abrir nada.
+
+  - id: cisco-asa-connection
+    vendor: cisco
+    mnemonic_regex: "^ASA-6-3020(13|15|20)$"
+    criticality_floor: informativo
+    title: Conexión permitida
+    explanation: El firewall creó una conexión. Es tráfico aceptado, útil como contexto y no como alarma.
+    probable_cause: Un flujo permitido por la política.
+    actions:
+      - Úsalo para ver si un flujo llegó a establecerse después de un deny.
+      - No requiere acción si el origen y el destino son los esperados.
+
+  - id: fgt-ips-unblocked
+    vendor: fortigate
+    type: utm
+    subtype: ips
+    action_not:
+      - blocked
+      - dropped
+      - deny
+      - denied
+      - drop
+      - clear_session
+      - reset
+    criticality_floor: critico
+    title: Intrusión detectada sin bloqueo
+    explanation: El IPS vio una firma de ataque y la acción no fue bloquearla. El tráfico puede haber seguido.
+    probable_cause: Firma en modo monitor, una excepción de política o un perfil que solo registra.
+    actions:
+      - Revisa origen, destino, firma y la acción real del mensaje.
+      - Confirma si ese flujo llegó al servidor en los eventos de tráfico del mismo instante.
+      - Si la firma aplica a tráfico no deseado, pasa la acción del sensor a bloqueo.
+
+  - id: fgt-ips-blocked
+    vendor: fortigate
+    type: utm
+    subtype: ips
+    criticality_floor: alto
+    title: Intrusión bloqueada
+    explanation: El IPS detectó una firma y la acción fue detener el flujo. El intento quedó registrado.
+    probable_cause: Escaneo, exploit o tráfico que coincide con una firma del sensor.
+    actions:
+      - Anota origen, destino y el nombre de la firma.
+      - Comprueba si el mismo origen insiste en la línea de tiempo.
+      - Mantén el bloqueo y valora limitar ese origen si no es legítimo.
+
+  - id: fgt-virus
+    vendor: fortigate
+    type: utm
+    subtype: virus
+    criticality_floor: critico
+    title: Malware detectado
+    explanation: El antivirus del firewall marcó un archivo o flujo como malware.
+    probable_cause: Descarga infectada, correo o un equipo interno ya comprometido.
+    actions:
+      - Identifica el equipo de origen y el archivo o URL del mensaje.
+      - Aísla ese equipo si el malware no quedó bloqueado.
+      - Revisa con el responsable del puesto antes de darlo por limpio.
+
+  - id: fgt-webfilter
+    vendor: fortigate
+    type: utm
+    subtype: webfilter
+    criticality_floor: medio
+    title: Filtrado web
+    explanation: Una política de filtrado web actuó sobre una petición. Conviene ver si el bloqueo era el esperado.
+    probable_cause: Categoría prohibida, un sitio recién reclasificado o un usuario saltándose la política.
+    actions:
+      - Mira usuario, URL y categoría en el mensaje.
+      - Si el bloqueo impide una herramienta de trabajo, revisa la excepción con quien administra la política.
+      - Si el destino es claramente malicioso, no abras una excepción.
+
+  - id: fgt-app-control
+    vendor: fortigate
+    subtype: app-ctrl
+    criticality_floor: medio
+    title: Control de aplicaciones
+    explanation: El control de aplicaciones clasificó o bloqueó una aplicación.
+    probable_cause: Una aplicación no permitida en esa política o un falso positivo de identificación.
+    actions:
+      - Revisa la aplicación, el usuario y la acción del mensaje.
+      - Confirma si esa política debe permitirla.
+      - Si es tráfico no deseado, deja el bloqueo y anota el origen.
+
+  - id: fgt-login-failed
+    vendor: fortigate
+    message_regex: "(?i)login failed|authentication failed|auth failed"
+    criticality_floor: alto
+    title: Inicio de sesión fallido
+    explanation: Un acceso de administración o de usuario no se autenticó en el FortiGate.
+    probable_cause: Credencial incorrecta, cuenta deshabilitada o intentos repetidos contra la gestión.
+    actions:
+      - Anota usuario, IP de origen e interfaz del mensaje.
+      - Si el origen no es de gestión, restringe el acceso administrativo a redes conocidas.
+      - Busca más fallos seguidos del mismo origen en la línea de tiempo.
+
+  - id: fgt-admin-login
+    vendor: fortigate
+    message_regex: "(?i)administrator .*logged in|admin login successful|logged in successfully"
+    criticality_floor: informativo
+    title: Inicio de sesión de administración
+    explanation: Un administrador entró al FortiGate. No es un fallo, pero deja constancia de quién accedió.
+    probable_cause: Una sesión de gestión legítima.
+    actions:
+      - Comprueba que el usuario y la IP de origen son habituales.
+      - Si no reconoces la sesión, revisa cuentas de administrador y cierra la que no corresponda.
+
+  - id: fgt-config-change
+    vendor: fortigate
+    message_regex: "(?i)configuration (is )?changed|config changed"
+    criticality_floor: medio
+    title: Cambio de configuración
+    explanation: La configuración del FortiGate cambió durante una sesión de administración.
+    probable_cause: Un cambio previsto o una modificación no anunciada.
+    actions:
+      - Identifica el administrador de la sesión.
+      - Contrasta el cambio con la ventana de mantenimiento.
+      - Si no estaba previsto, revisa la revisión de configuración y quién la aplicó.
+
+  - id: fgt-vpn-down
+    vendor: fortigate
+    message_regex: "(?i)tunnel-down|tunnel down|phase 1 error|vpn connection (is )?down"
+    criticality_floor: alto
+    title: Túnel VPN caído
+    explanation: Un túnel VPN dejó de estar establecido. El tráfico que dependía de él se queda sin camino.
+    probable_cause: El extremo remoto no responde, una clave distinta, una interfaz caída o un corte de Internet.
+    actions:
+      - Identifica el túnel y el extremo remoto en el mensaje.
+      - Comprueba la interfaz de salida y si el peer sigue siendo alcanzable.
+      - Si no renegocia, revisa propuestas IKE y la configuración del otro extremo.
+
+  - id: fgt-link-down
+    vendor: fortigate
+    message_regex: "(?i)link (is )?down|was turned down|interface status.*\\bdown\\b|status=\"down\""
+    criticality_floor: alto
+    title: Interfaz caída
+    explanation: Una interfaz del FortiGate pasó a down o el monitor de enlace la marcó caída.
+    probable_cause: Corte físico, equipo vecino apagado o un puerto deshabilitado.
+    actions:
+      - Identifica la interfaz y comprueba si sigue down.
+      - Revisa el cable, la óptica y el puerto remoto.
+      - Si es la salida a Internet o un enlace WAN, trátalo como incidencia.
+
+  - id: fgt-traffic-deny
+    vendor: fortigate
+    type: traffic
+    field_contains:
+      action: deny
+    criticality_floor: medio
+    title: Tráfico denegado
+    explanation: Una política del firewall denegó el flujo. Aislado suele ser normal; repetido desde un mismo origen indica un escaneo o una regla estrecha.
+    probable_cause: Política deny, un servicio no permitido o tráfico no solicitado.
+    actions:
+      - Mira origen, destino, puerto y el identificador de política.
+      - Confirma si ese flujo debería estar permitido.
+      - No abras la política solo por un deny suelto sin identificar la aplicación.
+
+  - id: fgt-ha-problem
+    vendor: fortigate
+    message_regex: "(?i)ha (sync|state).*(fail|down)|heartbeat.*(fail|down|lost)"
+    criticality_floor: alto
+    title: Problema de alta disponibilidad
+    explanation: El clúster de FortiGate reporta un fallo de sincronización o de heartbeat. El respaldo puede no estar en condiciones de tomar el relevo.
+    probable_cause: Enlace de HA caído, versiones distintas o un miembro del clúster inalcanzable.
+    actions:
+      - Comprueba el estado de los dos miembros y el enlace de heartbeat.
+      - Revisa si la configuración sigue sincronizada.
+      - No fuerces un failover hasta ver cuál de los dos nodos está sano.
